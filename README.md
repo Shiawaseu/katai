@@ -2,6 +2,11 @@
   <img src="branding/katai.png" alt="Katai Logo" width="120" />
   <h1>Katai</h1>
   <p><em>pronounced "ka-tai" or "cat-ai!"</em></p>
+  <p>
+    <a href="https://pypi.org/project/pykatai/"><img src="https://img.shields.io/pypi/v/pykatai.svg" alt="PyPI version" /></a>
+    <a href="https://pypi.org/project/pykatai/"><img src="https://img.shields.io/pypi/pyversions/pykatai.svg" alt="Python Versions" /></a>
+    <a href="https://pypi.org/project/pykatai/"><img src="https://img.shields.io/pypi/l/pykatai.svg" alt="License" /></a>
+  </p>
 </div>
 
 
@@ -102,7 +107,15 @@ tests/                  # Full unit and integration test suite
 - [uv](https://github.com/astral-sh/uv) (recommended) or standard `pip`
 - Node.js 18+ (only if modifying and building `frontend/` source)
 
-### Setup
+### Quick Install (PyPI)
+
+```bash
+pip install pykatai
+# or with uv:
+uv pip install pykatai
+```
+
+### Development Setup
 
 Clone the repository and install dependencies in editable mode:
 
