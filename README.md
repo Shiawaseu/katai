@@ -11,6 +11,7 @@
 
 
 https://github.com/user-attachments/assets/676d17b0-dd04-4491-ba99-85ce6858fbd3
+> Workshop example only, high latency is expected due to LLM calls.
 
 
 
