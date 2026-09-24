@@ -457,4 +457,4 @@ Katai builds upon and integrates foundational work from the open-source communit
 
 ## License
 
-This project is licensed under the [MIT](/LICENSE.md) License.
+This project is licensed under the [MIT](/LICENSE) License.
