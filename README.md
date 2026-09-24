@@ -5,9 +5,19 @@
 </div>
 
 
-**Katai** is a high-speed, non-autoregressive browser automation agent. It replaces multi-billion parameter autoregressive language models with a specialized, single-forward-pass decision engine based on fine-tuned [Laya](https://github.com/NandhaKishorM/laya) models.
+**Katai** is a high-speed, non-autoregressive browser automation agent & workshop. It operates with language models with a specialized, single-forward-pass decision engine based on fine-tuned [Laya](https://github.com/NandhaKishorM/laya) models.
+
+
+
+
+https://github.com/user-attachments/assets/676d17b0-dd04-4491-ba99-85ce6858fbd3
+
+
 
 While conventional web agents suffer from high latency (3–8 seconds per step) and token costs when prompting generative LLMs with raw HTML or accessibility trees, Katai formulates browser interaction as typed decision-making over candidate action spaces. Using a 322M parameter multimodal BERT backbone (`v10s`), Katai predicts the next browser operation and target element in **17–23 ms on CUDA** and **300–500 ms on Apple Silicon MPS**, outputting calibrated probability distributions over all observed interactive controls.
+
+> [!NOTE]
+> **Katai** currently only supports Laya and its specialized fine-tuned forks. With time, support for additional open-weight foundation models will be introduced.
 
 ---
 
@@ -21,8 +31,8 @@ While conventional web agents suffer from high latency (3–8 seconds per step) 
   Native, automatic acceleration across Apple Silicon Metal (`mps`), NVIDIA GPU (`cuda`), and CPU.
 - **Autonomous Browser Engine**:
   Direct Chrome DevTools Protocol (CDP) WebSocket communication, atomic DOM extraction via `snapshot.js`, automated Chrome process management, and unmutating loop detection.
-- **Hybrid Form Input (100% Offline Capable)**:
-  Smart regex and quotation parser extracts search queries, emails, and input parameters directly from user instructions without requiring external API keys. Seamlessly connects to OpenAI, OpenRouter, DeepSeek, Ollama, or vLLM when configured.
+- **Text-Input LLM Routing & Hybrid Form Input (100% Offline Capable)**:
+  Seamlessly connects to OpenAI, OpenRouter, DeepSeek, Ollama, or vLLM when configured. Smart regex and quotation parser extracts search queries, emails, and input parameters directly from user instructions without requiring external API keys incase of LLM absence.
 - **Web Console**:
   Embedded dark-mode console built with React, Vite, Tailwind CSS, Lucide icons, and Shadcn UI components. Features live Chrome viewport streaming, real-time SVG element bounding-box overlays, interactive DOM candidate exploration, step-by-step control (Predict / Act), calibrated confidence gauges, and execution trace history.
 - **Visual Terminal Interface & Progress Tracking**:
@@ -447,4 +457,4 @@ Katai builds upon and integrates foundational work from the open-source communit
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the [MIT](/LICENSE.md) License.
