@@ -1,8 +1,9 @@
-# Katai
-
-<p align="center">
+<div align="center">
   <img src="branding/katai.png" alt="Katai Logo" width="120" />
-</p>
+  <h1>Katai</h1>
+  <p><em>pronounced "ka-tai" or "cat-ai!"</em></p>
+</div>
+
 
 **Katai** is a high-speed, non-autoregressive browser automation agent. It replaces multi-billion parameter autoregressive language models with a specialized, single-forward-pass decision engine based on fine-tuned [Laya](https://github.com/NandhaKishorM/laya) models.
 
@@ -54,8 +55,7 @@ flowchart TD
 
 1. **Observation**: `snapshot.js` is evaluated in the browser context to inspect visible, uninhibited controls (buttons, links, textboxes, comboboxes, checkboxes, dropdowns, and scroll containers), assigning deterministic indices and capturing viewport coordinates (`rect`).
 2. **Action Space Partitioning**: Elements are grouped into operation targets (`CLICK`, `TYPE_TEXT`, `SELECT`) and page-level controls (`SCROLL_DOWN`, `SCROLL_UP`, `WAIT`).
-3. **Format v3 Packing & Chunk Tournament**: Candidate controls are rendered directly into question criteria rather than dumping raw page markup into the context window. If candidates exceed `KATAI_MAX_OPTIONS`, an interleaved chunk tournament runs in parallel, calculating:
-   $$\mathbb{P}(\text{candidate}) = \mathbb{P}_{\text{final}}(\text{chunk winner}) \times \mathbb{P}_{\text{chunk}}(\text{candidate})$$
+3. **Format v3 Packing & Chunk Tournament**: Candidate controls are rendered directly into question criteria rather than dumping raw page markup into the context window. If candidates exceed `KATAI_MAX_OPTIONS`, an interleaved chunk tournament runs in parallel, calculating `P(candidate) = P_final(chunk winner) × P_chunk(candidate)`.
 4. **Action Execution & Guardrails**: The selected action is executed via CDP. If the operation is `TYPE_TEXT`, the input value is supplied by the hybrid text helper. Changes in DOM fingerprint and URL are verified to detect stale pages and prevent infinite interaction loops.
 
 ### Package Structure
