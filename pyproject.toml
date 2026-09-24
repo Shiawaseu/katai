@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "katai"
+version = "1.0.0"
+description = "Katai is an ultra-fast, non-autoregressive AI browser agent powered by local System-1 decision models for instant, deterministic web automation."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "laya>=0.3.5",
+    "torch>=2.0.0",
+    "transformers>=4.40.0",
+    "huggingface-hub>=0.20.0",
+    "numpy>=1.24.0",
+    "websockets>=13.0",
+    "browser-harness>=0.1.0",
+]
+
+[project.scripts]
+katai = "katai.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["katai*"]
+
+[tool.setuptools.package-data]
+katai = [
+    "core/snapshot.js",
+    "cli/ascii.txt",
+    "web/static/*",
+    "web/static/**/*",
+]
+
