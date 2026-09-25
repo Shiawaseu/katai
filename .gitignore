@@ -42,3 +42,5 @@ htmlcov/
 # Node / Frontend
 node_modules/
 frontend/node_modules/
+
+.github/FUNDING.yml
