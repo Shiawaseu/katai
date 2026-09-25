@@ -257,6 +257,12 @@ katai console [options]
 Open `http://127.0.0.1:8766` in your browser.
 
 #### Console Features:
+- **Model Hot-Swapping**:
+  - Dynamically hot-swap fine-tuned Laya decision models in-memory on the fly without restarting the server or dropping active browser sessions.
+  - Dropdown selector in the top bar with pre-configured models (e.g. `ichenney/laya-browser-v32b`, `abedinia/laya-web-agent`, `v10s`, `v10`, `v11s`, `typed-decisions`).
+  - Checkpoint rescan & refresh button (🔄) to discover newly cached or local checkpoints.
+  - Direct input support for custom Hugging Face model URLs/repos (e.g. `https://huggingface.co/ichenney/laya-browser-v32b`).
+  - Real-time animated toast notifications tracking loading stages (resolving, downloading weights, allocating to MPS/CUDA) and duration.
 - **Live Viewport Streaming**: View live Chrome rendering with reactive element hover effects and synchronized SVG bounding boxes.
 - **Action Space Candidate Table**: Search, filter by operation/role (`button`, `link`, `textbox`), and view viewport coordinates (`rect`).
 - **Granular Execution Controls**:

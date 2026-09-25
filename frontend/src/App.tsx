@@ -8,6 +8,7 @@ import { ExecutionTrace } from "./components/ExecutionTrace";
 import { RawStateViewer } from "./components/RawStateViewer";
 import { KeyboardShortcutsModal } from "./components/KeyboardShortcutsModal";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./components/ui/tabs";
+import { ToastProvider, useToast } from "./components/ui/toast";
 import { Eye, Layers, Code2, AlertCircle } from "lucide-react";
 import { AgentState, DOMElement, HistoryItem } from "./types";
 
@@ -21,7 +22,8 @@ const INITIAL_STATE: AgentState = {
   elements: [],
 };
 
-export const App: React.FC = () => {
+const MainConsole: React.FC = () => {
+  const { addToast, updateToast } = useToast();
   const [state, setState] = useState<AgentState>(INITIAL_STATE);
   const [url, setUrl] = useState<string>("https://en.wikipedia.org/wiki/Main_Page");
   const [goal, setGoal] = useState<string>(
@@ -37,10 +39,15 @@ export const App: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState<boolean>(false);
 
+  // Model Hot-Swapping State
+  const [isModelLoading, setIsModelLoading] = useState<boolean>(false);
+  const [modelLoadingStage, setModelLoadingStage] = useState<string>("");
+  const [modelLoadingProgress, setModelLoadingProgress] = useState<number>(0);
+
   const isRunningRef = useRef(isRunning);
   isRunningRef.current = isRunning;
 
-  // Fetch initial agent state
+  // Fetch initial agent and model state
   const fetchState = useCallback(async () => {
     try {
       const res = await fetch("/api/agent/state");
@@ -64,6 +71,95 @@ export const App: React.FC = () => {
     fetchState();
   }, [fetchState]);
 
+  const handleSelectModel = async (modelId: string) => {
+    setIsModelLoading(true);
+    setModelLoadingStage("Resolving checkpoint...");
+    setModelLoadingProgress(0.1);
+
+    const toastId = "model-hot-swap";
+    addToast({
+      id: toastId,
+      type: "loading",
+      title: "Loading Model Checkpoint",
+      message: `Hot-swapping to ${modelId}...`,
+      stage: "Connecting to backend...",
+      progress: 0.1,
+    });
+
+    // Real-time status polling for progress transitions
+    let pollInterval: any = null;
+    pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/models/status");
+        if (res.ok) {
+          const status = await res.json();
+          if (status.status === "loading") {
+            if (status.stage) setModelLoadingStage(status.stage);
+            if (status.progress !== undefined) setModelLoadingProgress(status.progress);
+            updateToast(toastId, {
+              stage: status.stage,
+              progress: status.progress,
+            });
+          }
+        }
+      } catch {}
+    }, 250);
+
+    try {
+      const res = await fetch("/api/models/load", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: modelId }),
+      });
+
+      clearInterval(pollInterval);
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Failed to load model: ${res.statusText}`);
+      }
+
+      const data = await res.json();
+      setState((prev) => ({
+        ...prev,
+        model: data.checkpoint || modelId,
+        device: data.device || prev.device,
+      }));
+
+      updateToast(toastId, {
+        type: "success",
+        title: "Checkpoint Loaded",
+        message: `Successfully hot-swapped to ${modelId}`,
+        elapsed_ms: data.elapsed_ms,
+        device: data.device,
+        progress: 1.0,
+        duration: 4500,
+      });
+    } catch (err: any) {
+      clearInterval(pollInterval);
+      const errMsg = err.message || String(err);
+      updateToast(toastId, {
+        type: "error",
+        title: "Checkpoint Load Failed",
+        message: errMsg,
+      });
+      setErrorMessage(`Failed to hot-swap model: ${errMsg}`);
+    } finally {
+      setIsModelLoading(false);
+      setModelLoadingStage("");
+      setModelLoadingProgress(0);
+    }
+  };
+
+  const handleRefreshModels = async () => {
+    addToast({
+      type: "info",
+      title: "Checkpoints Rescanned",
+      message: "Rescanned local HF cache and models directory.",
+      duration: 3000,
+    });
+  };
+
   // Start / Initialize Agent
   const handleInitialize = async () => {
     setIsInitializing(true);
@@ -72,7 +168,7 @@ export const App: React.FC = () => {
       const res = await fetch("/api/agent/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, goal }),
+        body: JSON.stringify({ url, goal, checkpoint: state.model }),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -151,13 +247,14 @@ export const App: React.FC = () => {
       ...INITIAL_STATE,
       url,
       goal,
+      model: state.model,
+      device: state.device,
     });
   };
 
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user is currently typing in input or textarea
       const target = e.target as HTMLElement;
       if (
         target.tagName === "INPUT" ||
@@ -169,7 +266,7 @@ export const App: React.FC = () => {
 
       if (e.code === "Space") {
         e.preventDefault();
-        if (!isRunning && !isInitializing && (state.status === "ready" || state.status === "predicted")) {
+        if (!isRunning && !isInitializing && !isModelLoading && (state.status === "ready" || state.status === "predicted")) {
           handleStep();
         }
       } else if (e.key === "r" || e.key === "R") {
@@ -190,18 +287,22 @@ export const App: React.FC = () => {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isRunning, isInitializing, state.status, shortcutsOpen]);
+  }, [isRunning, isInitializing, isModelLoading, state.status, shortcutsOpen]);
 
   const lastHistoryItem = state.history.length > 0 ? state.history[state.history.length - 1] : null;
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground antialiased selection:bg-secondary">
-      {/* Header */}
       <Header
         state={state}
         onReset={handleReset}
         onOpenShortcuts={() => setShortcutsOpen(true)}
-        isBusy={isInitializing || isStepping || isRunning}
+        isBusy={isInitializing || isStepping || isRunning || isModelLoading}
+        onSelectModel={handleSelectModel}
+        isModelLoading={isModelLoading}
+        modelLoadingStage={modelLoadingStage}
+        modelLoadingProgress={modelLoadingProgress}
+        onRefreshModels={handleRefreshModels}
       />
 
       {/* Error Alert */}
@@ -237,7 +338,7 @@ export const App: React.FC = () => {
             onStop={handleStop}
             stepDelay={stepDelay}
             setStepDelay={setStepDelay}
-            isInitializing={isInitializing}
+            isInitializing={isInitializing || isModelLoading}
           />
 
           <DecisionMetrics
@@ -282,7 +383,7 @@ export const App: React.FC = () => {
                 setHoveredElementIndex={setHoveredElementIndex}
                 onRefresh={fetchState}
                 onLaunch={handleInitialize}
-                isInitializing={isInitializing}
+                isInitializing={isInitializing || isModelLoading}
               />
             </TabsContent>
 
@@ -323,6 +424,14 @@ export const App: React.FC = () => {
         onOpenChange={setShortcutsOpen}
       />
     </div>
+  );
+};
+
+export const App: React.FC = () => {
+  return (
+    <ToastProvider>
+      <MainConsole />
+    </ToastProvider>
   );
 };
 

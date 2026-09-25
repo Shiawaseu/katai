@@ -105,3 +105,62 @@ def test_console_api_stop_and_reset(console_server):
         data = json.loads(resp.read().decode("utf-8"))
         assert data["status"] == "idle"
         assert data["step_count"] == 0
+
+
+def test_console_api_models(console_server):
+    with urllib.request.urlopen(f"{console_server}/api/models", timeout=5.0) as resp:
+        assert resp.status == 200
+        data = json.loads(resp.read().decode("utf-8"))
+        assert "current_model" in data
+        assert "models" in data
+        assert isinstance(data["models"], list)
+        model_ids = [m["id"] for m in data["models"]]
+        assert "ichenney/laya-browser-v32b" in model_ids
+        assert "abedinia/laya-web-agent" in model_ids
+        assert "v10s" in model_ids
+
+
+def test_console_api_models_status(console_server):
+    with urllib.request.urlopen(f"{console_server}/api/models/status", timeout=5.0) as resp:
+        assert resp.status == 200
+        data = json.loads(resp.read().decode("utf-8"))
+        assert "status" in data
+        assert "progress" in data
+        assert "model" in data
+
+
+def test_console_api_models_refresh(console_server):
+    req = urllib.request.Request(
+        f"{console_server}/api/models/refresh",
+        data=b"{}",
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=5.0) as resp:
+        assert resp.status == 200
+        data = json.loads(resp.read().decode("utf-8"))
+        assert data.get("refreshed") is True
+        assert len(data.get("models", [])) >= 7
+
+
+def test_console_api_models_load_and_hotswap(console_server):
+    # Hot-swap to ichenney/laya-browser-v32b (already cached)
+    req = urllib.request.Request(
+        f"{console_server}/api/models/load",
+        data=json.dumps({"model": "https://huggingface.co/ichenney/laya-browser-v32b"}).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=30.0) as resp:
+        assert resp.status == 200
+        data = json.loads(resp.read().decode("utf-8"))
+        assert data.get("checkpoint") == "https://huggingface.co/ichenney/laya-browser-v32b"
+        assert "device" in data
+
+    # Verify status reflects new model
+    with urllib.request.urlopen(f"{console_server}/api/models/status", timeout=5.0) as resp:
+        assert resp.status == 200
+        data = json.loads(resp.read().decode("utf-8"))
+        assert data.get("status") == "success"
+        assert data.get("model") == "https://huggingface.co/ichenney/laya-browser-v32b"
+

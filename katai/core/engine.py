@@ -11,11 +11,14 @@ Provides:
 
 from __future__ import annotations
 
+import gc
 import json
 import os
+import re
 import sys
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -116,7 +119,224 @@ def build_question_items(agent: laya.Agent, state: Dict[str, Any], questions: Di
     return items, meta
 
 
-def _safe_snapshot_download(repo_id: str, allow_patterns: list[str]) -> str:
+def parse_model_id_or_url(s: str) -> Tuple[str, Optional[str]]:
+    """Parse a Hugging Face repo ID and optional subfolder from an input string or URL."""
+    s = s.strip()
+    # Check if HuggingFace URL
+    hf_match = re.match(
+        r"https?://(?:www\.)?huggingface\.co/([^/]+/[^/]+)(?:/(?:tree|blob|raw)/[^/]+/(.+))?",
+        s,
+    )
+    if hf_match:
+        repo_id = hf_match.group(1).rstrip("/")
+        subfolder = hf_match.group(2)
+        if subfolder:
+            subfolder = subfolder.rstrip("/")
+        return repo_id, subfolder
+    return s, None
+
+
+def find_checkpoint_dir(base_dir: str, subfolder: Optional[str] = None) -> str:
+    """Find directory containing rl_agent_config.json starting from base_dir."""
+    if subfolder:
+        target = os.path.join(base_dir, subfolder)
+        if os.path.exists(os.path.join(target, "rl_agent_config.json")):
+            return target
+
+    if os.path.exists(os.path.join(base_dir, "rl_agent_config.json")):
+        return base_dir
+
+    # Search immediate subdirectories
+    try:
+        subdirs = [d for d in Path(base_dir).iterdir() if d.is_dir() and not d.name.startswith(".")]
+        for d in subdirs:
+            if (d / "rl_agent_config.json").exists():
+                return str(d)
+    except Exception:
+        pass
+
+    return base_dir
+
+
+KNOWN_MODELS: List[Dict[str, Any]] = [
+    {
+        "id": "ichenney/laya-browser-v32b",
+        "name": "Laya Browser v32b (Chenney)",
+        "category": "Featured",
+        "params": "322M",
+        "description": "Specialized fine-tuned browser decision model by @ichenney",
+        "repo_url": "https://huggingface.co/ichenney/laya-browser-v32b",
+    },
+    {
+        "id": "abedinia/laya-web-agent",
+        "name": "Laya Web Agent (Abedinia)",
+        "category": "Featured",
+        "params": "322M",
+        "description": "Fine-tuned autonomous web agent checkpoint by @abedinia",
+        "repo_url": "https://huggingface.co/abedinia/laya-web-agent",
+    },
+    {
+        "id": "v10s",
+        "name": "Laya Browser v10s (Default)",
+        "category": "Official Checkpoints",
+        "params": "322M",
+        "description": "Default calibrated browser decision model (high-speed inference)",
+        "repo_url": "https://huggingface.co/cklxx/laya-browser",
+    },
+    {
+        "id": "v10",
+        "name": "Laya Browser v10",
+        "category": "Official Checkpoints",
+        "params": "322M",
+        "description": "Official standard browser decision checkpoint",
+        "repo_url": "https://huggingface.co/cklxx/laya-browser",
+    },
+    {
+        "id": "v11s",
+        "name": "Laya Browser v11s",
+        "category": "Official Checkpoints",
+        "params": "322M",
+        "description": "Extended context browser decision model",
+        "repo_url": "https://huggingface.co/cklxx/laya-browser",
+    },
+    {
+        "id": "typed-decisions",
+        "name": "Laya Typed Decisions",
+        "category": "Base Models",
+        "params": "Base",
+        "description": "ConvAI base typed decision model",
+        "repo_url": "https://huggingface.co/convaiinnovations/laya",
+    },
+    {
+        "id": "convaiinnovations/laya",
+        "name": "Laya Base (Multilingual)",
+        "category": "Base Models",
+        "params": "Base",
+        "description": "Original multilingual foundation model",
+        "repo_url": "https://huggingface.co/convaiinnovations/laya",
+    },
+]
+
+
+def is_model_cached(model_id: str) -> bool:
+    """Check if model checkpoint is downloaded and available in local Hugging Face cache or disk."""
+    if os.path.isdir(model_id):
+        return True
+
+    repo_id, subfolder = parse_model_id_or_url(model_id)
+
+    if repo_id in ("v10s", "v10", "v11s"):
+        try:
+            from huggingface_hub import try_to_load_from_cache
+
+            c = try_to_load_from_cache("cklxx/laya-browser", f"{repo_id}/rl_agent_config.json")
+            return bool(c and os.path.isfile(c))
+        except Exception:
+            return False
+
+    if repo_id in ("typed", "typed-decisions"):
+        try:
+            from huggingface_hub import try_to_load_from_cache
+
+            c = try_to_load_from_cache("convaiinnovations/laya", "typed-decisions/rl_agent_config.json")
+            return bool(c and os.path.isfile(c))
+        except Exception:
+            return False
+
+    if repo_id in ("multilingual", "english", "convaiinnovations/laya"):
+        try:
+            from huggingface_hub import try_to_load_from_cache
+
+            c = try_to_load_from_cache("convaiinnovations/laya", "rl_agent_config.json")
+            return bool(c and os.path.isfile(c))
+        except Exception:
+            pass
+
+    # Generic HF repo
+    repo_folder = "models--" + repo_id.replace("/", "--")
+    hf_hub = Path(os.path.expanduser("~/.cache/huggingface/hub")) / repo_folder / "snapshots"
+    if hf_hub.exists():
+        try:
+            for snap in hf_hub.iterdir():
+                if snap.is_dir():
+                    if (snap / "rl_agent_config.json").exists():
+                        return True
+                    for child in snap.iterdir():
+                        if child.is_dir() and (child / "rl_agent_config.json").exists():
+                            return True
+        except Exception:
+            pass
+    return False
+
+
+def list_available_models() -> List[Dict[str, Any]]:
+    """Return all known, cached, and locally discovered models."""
+    models: List[Dict[str, Any]] = []
+    seen_ids = set()
+
+    for m in KNOWN_MODELS:
+        item = dict(m)
+        item["cached"] = is_model_cached(m["id"])
+        models.append(item)
+        seen_ids.add(m["id"])
+
+    # Discover additional cached models from ~/.cache/huggingface/hub
+    hf_hub = Path(os.path.expanduser("~/.cache/huggingface/hub"))
+    if hf_hub.exists():
+        try:
+            for p in hf_hub.glob("models--*"):
+                if not p.is_dir():
+                    continue
+                # Parse repo name e.g. models--ichenney--laya-browser-v32b -> ichenney/laya-browser-v32b
+                parts = p.name[8:].split("--")
+                if len(parts) >= 2:
+                    repo_id = f"{parts[0]}/{'--'.join(parts[1:])}"
+                    if repo_id in seen_ids:
+                        continue
+                    snapshots = p / "snapshots"
+                    if snapshots.exists():
+                        for snap in snapshots.iterdir():
+                            if snap.is_dir():
+                                c_dir = find_checkpoint_dir(str(snap))
+                                if os.path.exists(os.path.join(c_dir, "rl_agent_config.json")):
+                                    models.append({
+                                        "id": repo_id,
+                                        "name": f"{parts[-1]} ({parts[0]})",
+                                        "category": "Discovered Cached",
+                                        "params": "Cached",
+                                        "description": f"Locally cached model from {repo_id}",
+                                        "repo_url": f"https://huggingface.co/{repo_id}",
+                                        "cached": True,
+                                    })
+                                    seen_ids.add(repo_id)
+                                    break
+        except Exception:
+            pass
+
+    # Discover local models folder in workspace
+    for local_dir in [Path("models"), Path("checkpoints")]:
+        if local_dir.is_dir():
+            try:
+                for sub in local_dir.iterdir():
+                    if sub.is_dir() and (sub / "rl_agent_config.json").exists():
+                        sub_id = str(sub)
+                        if sub_id not in seen_ids:
+                            models.append({
+                                "id": sub_id,
+                                "name": sub.name,
+                                "category": "Local Checkpoints",
+                                "params": "Local",
+                                "description": f"Local checkpoint at {sub}",
+                                "cached": True,
+                            })
+                            seen_ids.add(sub_id)
+            except Exception:
+                pass
+
+    return models
+
+
+def _safe_snapshot_download(repo_id: str, allow_patterns: Optional[list[str]] = None) -> str:
     """Download checkpoint snapshot from Hugging Face Hub."""
     from huggingface_hub import snapshot_download
     from huggingface_hub.utils import disable_progress_bars, enable_progress_bars
@@ -129,7 +349,10 @@ def _safe_snapshot_download(repo_id: str, allow_patterns: list[str]) -> str:
         pass
 
     try:
-        path = snapshot_download(repo_id, allow_patterns=allow_patterns)
+        kw = {}
+        if allow_patterns:
+            kw["allow_patterns"] = allow_patterns
+        path = snapshot_download(repo_id, **kw)
     finally:
         try:
             enable_progress_bars("huggingface_hub.snapshot_download")
@@ -163,13 +386,50 @@ class KataiEngine:
         self.max_options = max_options
         self.fmt = fmt
         self.escalate_tau = float(os.environ.get("ESCALATE_TAU", str(escalate_tau)))
-
-        resolved_path = self._resolve_checkpoint(checkpoint)
+        self.agent: Optional[laya.Agent] = None
+        self.resolved_path: str = ""
         self.device = self._resolve_device(device)
+        self.load_model(checkpoint, device=self.device)
 
-        print(f"[KataiEngine] Loading {checkpoint} on {self.device}...", file=sys.stderr)
+    def load_model(
+        self,
+        checkpoint: str,
+        device: Optional[str] = None,
+        progress_callback: Optional[Callable[[str, float], None]] = None,
+    ) -> Dict[str, Any]:
+        """Hot-swap the decision model in-process, unloading previous weights."""
         t0 = time.perf_counter()
+        checkpoint = checkpoint.strip()
+        if device:
+            self.device = self._resolve_device(device)
+
+        if progress_callback:
+            progress_callback(f"Resolving checkpoint '{checkpoint}'...", 0.15)
+
+        resolved_path = self._resolve_checkpoint(checkpoint, progress_callback=progress_callback)
+
+        # Clean up existing model and free GPU/MPS memory
+        if hasattr(self, "agent") and self.agent is not None:
+            if progress_callback:
+                progress_callback("Unloading previous model from memory...", 0.6)
+            try:
+                del self.agent.model
+                del self.agent
+            except Exception:
+                pass
+            self.agent = None
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                torch.mps.empty_cache()
+
+        if progress_callback:
+            progress_callback(f"Loading weights & tokenizer on {self.device}...", 0.8)
+
+        print(f"[KataiEngine] Loading {checkpoint} ({resolved_path}) on {self.device}...", file=sys.stderr)
         self.agent = laya.load(resolved_path, device=self.device)
+
         # Apply head max length from fine-tuning if present
         if self.agent.cfg.get("head_max_len_train"):
             self.agent.cfg["head_max_len"] = self.agent.cfg["head_max_len_train"]
@@ -177,10 +437,28 @@ class KataiEngine:
             self.agent.cfg["head_max_len"] = 768
 
         self.fmt = self.agent.cfg.get("laya_fmt", self.fmt)
+        self.checkpoint_name = checkpoint
+        self.resolved_path = resolved_path
+
+        elapsed_ms = round((time.perf_counter() - t0) * 1000)
         print(
-            f"[KataiEngine] Loaded in {(time.perf_counter()-t0)*1000:.1f}ms | fmt={self.fmt} | head_max_len={self.agent.cfg.get('head_max_len')}",
+            f"[KataiEngine] Loaded {checkpoint} in {elapsed_ms:.1f}ms | fmt={self.fmt} | head_max_len={self.agent.cfg.get('head_max_len')}",
             file=sys.stderr,
         )
+
+        if progress_callback:
+            progress_callback("Model loaded successfully!", 1.0)
+
+        return {
+            "checkpoint": checkpoint,
+            "resolved_path": resolved_path,
+            "device": str(self.device),
+            "fmt": self.fmt,
+            "head_max_len": self.agent.cfg.get("head_max_len"),
+            "model_name": self.agent.cfg.get("model_name", "laya"),
+            "encoder": self.agent.cfg.get("encoder"),
+            "elapsed_ms": elapsed_ms,
+        }
 
     def _resolve_device(self, preferred: Optional[str] = None) -> str:
         if preferred:
@@ -191,16 +469,23 @@ class KataiEngine:
             return "mps"
         return "cpu"
 
-    def _resolve_checkpoint(self, name: str) -> str:
+    def _resolve_checkpoint(
+        self,
+        name: str,
+        progress_callback: Optional[Callable[[str, float], None]] = None,
+    ) -> str:
+        name = name.strip()
         if os.path.isdir(name):
-            return name
+            return find_checkpoint_dir(name)
+
+        repo_id, subfolder = parse_model_id_or_url(name)
 
         # Fast path: check if standard checkpoint is already cached in local HF hub cache
-        if name in ("v10s", "v10", "v11s"):
+        if repo_id in ("v10s", "v10", "v11s"):
             try:
                 from huggingface_hub import try_to_load_from_cache
 
-                cached = try_to_load_from_cache("cklxx/laya-browser", f"{name}/rl_agent_config.json")
+                cached = try_to_load_from_cache("cklxx/laya-browser", f"{repo_id}/rl_agent_config.json")
                 if cached and isinstance(cached, str) and os.path.isfile(cached):
                     ck_dir = os.path.dirname(cached)
                     if os.path.isfile(os.path.join(ck_dir, "model.safetensors")):
@@ -208,14 +493,16 @@ class KataiEngine:
             except Exception:
                 pass
 
-            path = _safe_snapshot_download("cklxx/laya-browser", allow_patterns=[f"{name}/*"])
-            ck_dir = os.path.join(path, name)
+            if progress_callback:
+                progress_callback(f"Downloading {repo_id} from Hugging Face Hub...", 0.3)
+            path = _safe_snapshot_download("cklxx/laya-browser", allow_patterns=[f"{repo_id}/*"])
+            ck_dir = os.path.join(path, repo_id)
             if os.path.isdir(ck_dir):
                 return ck_dir
-            return path
+            return find_checkpoint_dir(path, repo_id)
 
         # Check standard base laya models
-        if name in ("typed", "typed-decisions"):
+        if repo_id in ("typed", "typed-decisions"):
             try:
                 from huggingface_hub import try_to_load_from_cache
 
@@ -227,14 +514,27 @@ class KataiEngine:
             except Exception:
                 pass
 
+            if progress_callback:
+                progress_callback("Downloading typed-decisions from Hugging Face...", 0.3)
             path = _safe_snapshot_download("convaiinnovations/laya", allow_patterns=["typed-decisions/*"])
-            return os.path.join(path, "typed-decisions") if os.path.isdir(os.path.join(path, "typed-decisions")) else path
+            return os.path.join(path, "typed-decisions") if os.path.isdir(os.path.join(path, "typed-decisions")) else find_checkpoint_dir(path, "typed-decisions")
 
-        if name == "multilingual":
+        if repo_id in ("multilingual", "english"):
             return "convaiinnovations/laya"
-        if name == "english":
-            return "convaiinnovations/laya"
-        return name
+
+        # General Hugging Face repository or subfolder (e.g. ichenney/laya-browser-v32b, abedinia/laya-web-agent)
+        if progress_callback:
+            progress_callback(f"Downloading snapshot for {repo_id}...", 0.3)
+
+        allow_patterns = [f"{subfolder}/*"] if subfolder else None
+        path = _safe_snapshot_download(repo_id, allow_patterns=allow_patterns)
+        resolved = find_checkpoint_dir(path, subfolder=subfolder)
+        if not os.path.exists(os.path.join(resolved, "rl_agent_config.json")):
+            raise FileNotFoundError(
+                f"Incompatible model: {name!r} does not contain 'rl_agent_config.json'. "
+                f"Make sure you are loading a compatible Laya browser decision model."
+            )
+        return resolved
 
     @torch.no_grad()
     def _predict_raw(self, state: Dict[str, Any], questions: Dict[str, Any]) -> Dict[str, Any]:

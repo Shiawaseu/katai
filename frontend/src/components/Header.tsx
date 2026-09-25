@@ -4,12 +4,18 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { AgentState } from "@/types";
+import { ModelSelector } from "./ModelSelector";
 
 interface HeaderProps {
   state: AgentState;
   onReset: () => void;
   onOpenShortcuts: () => void;
   isBusy: boolean;
+  onSelectModel: (modelId: string) => Promise<void>;
+  isModelLoading: boolean;
+  modelLoadingStage?: string;
+  modelLoadingProgress?: number;
+  onRefreshModels?: () => Promise<void>;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -17,6 +23,11 @@ export const Header: React.FC<HeaderProps> = ({
   onReset,
   onOpenShortcuts,
   isBusy,
+  onSelectModel,
+  isModelLoading,
+  modelLoadingStage,
+  modelLoadingProgress,
+  onRefreshModels,
 }) => {
   const getStatusBadge = () => {
     switch (state.status) {
@@ -82,17 +93,20 @@ export const Header: React.FC<HeaderProps> = ({
             katai
           </span>
           <span className="text-[11px] text-muted-foreground font-mono px-1.5 py-0.5 rounded border border-border bg-secondary/50">
-            v0.1
+            v1.1
           </span>
         </div>
 
-        <div className="hidden md:flex items-center gap-1.5 pl-3 border-l border-border font-mono text-xs text-muted-foreground">
-          <span className="px-2 py-0.5 rounded border border-border bg-secondary/30">
-            {modelName}
-          </span>
-          <span className="px-2 py-0.5 rounded border border-border bg-secondary/30">
-            {deviceName}
-          </span>
+        <div className="flex items-center gap-1.5 pl-3 border-l border-border">
+          <ModelSelector
+            currentModel={state.model || "v10s"}
+            currentDevice={state.device || (navigator.platform.includes("Mac") ? "MPS" : "CUDA")}
+            onSelectModel={onSelectModel}
+            isLoading={isModelLoading}
+            loadingStage={modelLoadingStage}
+            loadingProgress={modelLoadingProgress}
+            onRefreshModels={onRefreshModels}
+          />
         </div>
       </div>
 

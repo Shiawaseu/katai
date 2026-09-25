@@ -13,7 +13,7 @@ import base64
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Optional
+from typing import Any, Callable, Dict, Generator, List, Optional
 
 from .browser import Browser, StalePage, action_space
 from .engine import LayaEngine
@@ -57,6 +57,22 @@ class KataiAgent:
             "started_at": None,
         }
 
+    def switch_model(
+        self,
+        checkpoint: str,
+        device: Optional[str] = None,
+        progress_callback: Optional[Callable[[str, float], None]] = None,
+    ) -> Dict[str, Any]:
+        """Hot-swap the decision model in-process without losing session state."""
+        if not self.engine:
+            self.engine = LayaEngine(checkpoint=checkpoint, device=device)
+            return {
+                "checkpoint": checkpoint,
+                "device": str(self.engine.device),
+                "model_name": getattr(self.engine.agent, "cfg", {}).get("model_name", "laya"),
+            }
+        return self.engine.load_model(checkpoint, device=device, progress_callback=progress_callback)
+
     def start(self, url: str, goal: str):
         """Initialize browser and observe initial page."""
         self.state["url"] = url
@@ -91,8 +107,8 @@ class KataiAgent:
             "step_count": len(self.state["history"]),
             "elapsed_ms": self.state["elapsed_ms"],
             "screenshot": self.state["page"].get("screenshot", ""),
-            "model": getattr(self.engine, "checkpoint", "v10s"),
-            "device": getattr(self.engine, "device", "mps"),
+            "model": getattr(self.engine, "checkpoint_name", getattr(self.engine, "checkpoint", "v10s")),
+            "device": str(getattr(self.engine, "device", "mps")),
         }
 
     def predict(self) -> Dict[str, Any]:

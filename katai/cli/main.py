@@ -62,7 +62,7 @@ def render_confidence_bar(conf: float, width: int = 10) -> str:
 
 def print_cli_banner():
     """Print the ASCII banner on initialization."""
-    banner = get_ascii_banner()
+    banner = False #get_ascii_banner()
     if banner:
         print(banner)
         print()

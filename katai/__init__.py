@@ -27,7 +27,7 @@ from katai.core.text_helper import extract_heuristic_text, extract_llm_text, get
 from katai.server.systemone import start_server
 from katai.web.console import start_console
 
-__version__ = "0.1.0"
+__version__ = "1.1"
 __all__ = [
     "KataiAgent",
     "KataiEngine",

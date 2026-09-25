@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pykatai"
-version = "1.0.0"
+version = "1.1"
 description = "Katai is an ultra-fast, non-autoregressive AI browser agent powered by local System-1 decision models for instant, deterministic web automation."
 readme = "README.md"
 requires-python = ">=3.10"
