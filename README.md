@@ -58,7 +58,7 @@ flowchart TD
     Snapshot --> Actions["Raw DOM Actions & Viewport Snapshot"]
     Actions --> Space["action_space (CLICK, TYPE_TEXT, SELECT)"]
     Space --> Engine["KataiEngine (Non-Autoregressive Decision Head)"]
-    Engine --> Checkpoint["v10s Checkpoint (322M mmBERT-base)"]
+    Engine --> Checkpoint["Configured Checkpoint"]
     Checkpoint --> Pred["Operation + Target Element + Calibrated Probs"]
     Pred --> TextCheck{"Operation == TYPE_TEXT?"}
     TextCheck -- "Yes" --> TextHelper["Text Helper (Heuristic / LLM)"]
